@@ -1,0 +1,124 @@
+version: "3.8"
+services:
+  celery-beat:
+    container_name: celery-beat
+    build:
+      context: ../../
+      dockerfile: celery.Dockerfile
+    command: celery --app server beat --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  celery-get-feed-urls-worker:
+    container_name: celery-get-feed-urls-worker
+    hostname: celery-get-feed-urls-worker
+    build:
+      context: ../../
+      dockerfile: celery.Dockerfile
+    command: celery --app server worker -Q feed_urls -c 1 --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  celery-scrap-xml-worker:
+    container_name: celery-scrap-xml-worker
+    hostname: celery-scrap-xml-worker
+    build:
+      context: ../../
+      dockerfile: celery.Dockerfile
+    command: celery --app server worker -Q xml_scrapers -c 50 --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  celery-save-projects-worker:
+    container_name: celery-save-projects-worker
+    hostname: celery-save-projects-worker
+    build:
+      context: ../../
+      dockerfile: celery.Dockerfile
+    command: celery --app server worker -Q save_projects -c 1 --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  celery-synchronize-tables-worker:
+    container_name: celery-synchronize-tables-worker
+    hostname: celery-synchronize-tables-worker
+    build:
+      context: ../../
+      dockerfile: celery.Dockerfile
+    command: celery --app server worker -Q synchronization -c 4 --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  celery-upwork-login:
+    container_name: celery-upwork-login
+    hostname: celery-upwork-login
+    build:
+      context: ../../
+      dockerfile: celery_upwork.Dockerfile
+    command: celery --app server worker -Q upwork_auto_login -c 1 --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  celery-generic-worker:
+    container_name: celery-generic-worker
+    hostname: celery-generic-worker
+    build:
+      context: ../../
+      dockerfile: celery.Dockerfile
+    command: celery --app server worker -Q generic -c 5 --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ../../:/leadgen-celery
+
+  web-leadgen:
+    container_name: web-leadgen
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    volumes:
+      - ../../:/app
+    env_file:
+      - ./.env
+    expose:
+      - "8334"
+    restart: always
+
+  nginx_leadgen:
+    container_name: nginx_leadgen
+    build:
+      context: ../../
+      dockerfile: nginx.prod.Dockerfile
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    volumes:
+      - ../../server_static:/server_static
+      - ../../certbot/conf:/etc/letsencrypt
+      - ../../certbot/www:/var/www/certbot
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web-leadgen
+    env_file:
+      - .env
+
+  certbot:
+    container_name: certbot_leadgen
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ../../certbot/conf:/etc/letsencrypt
+      - ../../certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
